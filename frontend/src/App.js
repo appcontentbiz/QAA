@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import "./App.css";
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 function App() {
   const [token, setToken] = useState("");
   const [username, setUsername] = useState("");
@@ -10,7 +12,7 @@ function App() {
 
   const login = async () => {
     try {
-      const response = await fetch("http://localhost:5000/login", {
+      const response = await fetch(`${API_URL}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -21,10 +23,11 @@ function App() {
         setIsLoggedIn(true);
         setMessage("Login successful!");
       } else {
-        setMessage("Login failed!");
+        setMessage("Login failed: " + (data.error || "Invalid credentials"));
       }
     } catch (error) {
-      setMessage("Error connecting to server");
+      console.error("Login error:", error);
+      setMessage("Error connecting to server. Please make sure the backend server is running.");
     }
   };
 
@@ -38,16 +41,22 @@ function App() {
               <input
                 type="text"
                 placeholder="Username"
+                value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="input-field"
               />
               <input
                 type="password"
                 placeholder="Password"
+                value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input-field"
               />
-              <button onClick={login} className="login-button">
+              <button 
+                onClick={login} 
+                className="login-button"
+                disabled={!username || !password}
+              >
                 Login
               </button>
             </>
@@ -59,6 +68,8 @@ function App() {
                   setToken("");
                   setIsLoggedIn(false);
                   setMessage("");
+                  setUsername("");
+                  setPassword("");
                 }} 
                 className="login-button"
               >
@@ -66,7 +77,9 @@ function App() {
               </button>
             </div>
           )}
-          <p className="message">{message}</p>
+          <p className={`message ${message.includes('Error') ? 'error' : ''}`}>
+            {message}
+          </p>
         </div>
       </header>
     </div>
