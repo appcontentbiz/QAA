@@ -8,10 +8,17 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  padding-top: 2rem;
   color: white;
 }
 
+.App-header h1 {
+  margin-bottom: 2rem;
+  color: #61dafb;
+}
+
+/* Login styles */
 .login-container {
   display: flex;
   flex-direction: column;
@@ -44,7 +51,7 @@
   box-shadow: 0 0 0 2px #61dafb;
 }
 
-.login-button {
+.login-button, .generate-button {
   padding: 0.8rem;
   border: none;
   border-radius: 4px;
@@ -55,12 +62,14 @@
   transition: all 0.3s ease;
 }
 
-.login-button:hover:not(:disabled) {
+.login-button:hover:not(:disabled),
+.generate-button:hover:not(:disabled) {
   background-color: #4fa8c7;
   transform: translateY(-1px);
 }
 
-.login-button:disabled {
+.login-button:disabled,
+.generate-button:disabled {
   background-color: #cccccc;
   cursor: not-allowed;
   opacity: 0.7;
@@ -95,4 +104,130 @@
 
 .message.success {
   color: #51cf66;
+}
+
+/* Dashboard styles */
+.dashboard {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+.tabs {
+  display: flex;
+  gap: 1rem;
+}
+
+.tab-button {
+  padding: 0.8rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  background-color: transparent;
+  color: white;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.tab-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.tab-button.active {
+  background-color: #61dafb;
+  color: #282c34;
+}
+
+.logout-button {
+  padding: 0.6rem 1.2rem;
+  border: 2px solid #ff6b6b;
+  border-radius: 4px;
+  background-color: transparent;
+  color: #ff6b6b;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.logout-button:hover {
+  background-color: #ff6b6b;
+  color: white;
+}
+
+.dashboard-content {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 2rem;
+  min-height: 400px;
+}
+
+/* Code generation styles */
+.code-generation {
+  text-align: left;
+}
+
+.code-input {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.prompt-input {
+  flex: 1;
+  min-height: 100px;
+  padding: 1rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-family: monospace;
+  background-color: rgba(255, 255, 255, 0.9);
+  resize: vertical;
+}
+
+.prompt-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #61dafb;
+}
+
+.code-output {
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  padding: 1rem;
+}
+
+.code-block {
+  margin: 0;
+  padding: 1rem;
+  background-color: rgba(0, 0, 0, 0.5);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  font-family: monospace;
+  color: #e9ecef;
+}
+
+.copy-button {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.1);
+  color: white;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.copy-button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
 }
