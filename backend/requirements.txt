@@ -1,0 +1,5 @@
+flask==2.0.1
+flask-cors==3.0.10
+openai==0.27.0
+PyJWT==2.3.0
+gitpython==3.1.24
