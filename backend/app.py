@@ -1,307 +1,165 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify
 from flask_cors import CORS
-from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
-from datetime import datetime, timedelta
+from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
+import datetime
 import os
-from werkzeug.utils import secure_filename
-from models import db, User, Project, Template, Component, ProjectCollaborator, Asset
-from config import config
-import openai
-from authlib.integrations.flask_client import OAuth
-import boto3
-from PIL import Image
-import io
 import json
+from functools import wraps
 
-# Initialize Flask app
 app = Flask(__name__)
-app.config.from_object(config['development'])
-
-# Initialize extensions
 CORS(app)
-db.init_app(app)
-migrate = Migrate(app, db)
-oauth = OAuth(app)
 
-# Set up OAuth providers
-oauth.register(
-    name='github',
-    client_id=app.config['GITHUB_CLIENT_ID'],
-    client_secret=app.config['GITHUB_CLIENT_SECRET'],
-    access_token_url='https://github.com/login/oauth/access_token',
-    access_token_params=None,
-    authorize_url='https://github.com/login/oauth/authorize',
-    authorize_params=None,
-    api_base_url='https://api.github.com/',
-    client_kwargs={'scope': 'repo user'},
-)
+# Configuration
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
 
-oauth.register(
-    name='google',
-    client_id=app.config['GOOGLE_CLIENT_ID'],
-    client_secret=app.config['GOOGLE_CLIENT_SECRET'],
-    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
-    client_kwargs={'scope': 'openid email profile'},
-)
-
-# Set up AWS S3
-s3 = boto3.client(
-    's3',
-    aws_access_key_id=app.config['AWS_ACCESS_KEY_ID'],
-    aws_secret_access_key=app.config['AWS_SECRET_ACCESS_KEY']
-)
-
-# OpenAI configuration
-openai.api_key = app.config['OPENAI_API_KEY']
+# Simple in-memory storage (replace with database in production)
+users = {}
+projects = {}
+components = {}
 
 def token_required(f):
+    @wraps(f)
     def decorated(*args, **kwargs):
-        token = request.headers.get('x-access-token')
+        token = request.headers.get('Authorization')
+        
         if not token:
-            return jsonify({"error": "Token is missing"}), 401
+            return jsonify({'error': 'Token is missing'}), 401
+        
         try:
-            data = jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=["HS256"])
-            current_user = User.query.get(data['user_id'])
-        except:
-            return jsonify({"error": "Token is invalid"}), 401
+            if token.startswith('Bearer '):
+                token = token.split(' ')[1]
+            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+            if data['user_id'] not in users:
+                raise Exception('User not found')
+            current_user = users[data['user_id']]
+        except Exception as e:
+            return jsonify({'error': 'Token is invalid', 'details': str(e)}), 401
+            
         return f(current_user, *args, **kwargs)
+    
     return decorated
 
 @app.route('/register', methods=['POST'])
 def register():
-    data = request.json
+    data = request.get_json()
     
-    if User.query.filter_by(username=data['username']).first():
-        return jsonify({"error": "Username already exists"}), 400
+    if not data or not data.get('email') or not data.get('password'):
+        return jsonify({'error': 'Missing required fields'}), 400
         
-    if User.query.filter_by(email=data['email']).first():
-        return jsonify({"error": "Email already exists"}), 400
+    if any(u['email'] == data['email'] for u in users.values()):
+        return jsonify({'error': 'User already exists'}), 400
+        
+    user_id = str(len(users) + 1)
+    user = {
+        'id': user_id,
+        'email': data['email'],
+        'username': data.get('username', data['email']),
+        'password_hash': generate_password_hash(data['password']),
+        'created_at': datetime.datetime.utcnow().isoformat()
+    }
     
-    user = User(
-        username=data['username'],
-        email=data['email'],
-        role='beginner'
-    )
-    user.set_password(data['password'])
+    users[user_id] = user
     
-    db.session.add(user)
-    db.session.commit()
-    
-    return jsonify({
-        "message": "Registration successful",
-        "user": {
-            "username": user.username,
-            "email": user.email,
-            "role": user.role
-        }
-    }), 201
+    return jsonify({'message': 'User created successfully', 'user_id': user_id}), 201
 
 @app.route('/login', methods=['POST'])
 def login():
-    data = request.json
-    user = User.query.filter_by(username=data['username']).first()
+    data = request.get_json()
     
-    if user and user.check_password(data['password']):
-        token = jwt.encode(
-            {
-                'user_id': user.id,
-                'exp': datetime.utcnow() + timedelta(hours=24)
-            },
-            app.config['JWT_SECRET_KEY'],
-            algorithm="HS256"
-        )
-        return jsonify({
-            'token': token,
-            'user': {
-                'username': user.username,
-                'email': user.email,
-                'role': user.role
-            }
-        })
+    if not data or not data.get('email') or not data.get('password'):
+        return jsonify({'error': 'Missing required fields'}), 400
     
-    return jsonify({"error": "Invalid credentials"}), 401
-
-@app.route('/oauth/github')
-def github_login():
-    return oauth.github.authorize_redirect(redirect_uri=url_for('github_callback', _external=True))
-
-@app.route('/oauth/github/callback')
-def github_callback():
-    token = oauth.github.authorize_access_token()
-    resp = oauth.github.get('user', token=token)
-    profile = resp.json()
-    # Handle GitHub user data and create/update user
-    return jsonify({"message": "GitHub authentication successful"})
+    user = next((u for u in users.values() if u['email'] == data['email']), None)
+    
+    if not user or not check_password_hash(user['password_hash'], data['password']):
+        return jsonify({'error': 'Invalid credentials'}), 401
+    
+    token = jwt.encode({
+        'user_id': user['id'],
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(days=1)
+    }, app.config['SECRET_KEY'])
+    
+    return jsonify({
+        'token': token,
+        'user': {
+            'id': user['id'],
+            'email': user['email'],
+            'username': user['username']
+        }
+    })
 
 @app.route('/projects', methods=['GET', 'POST'])
 @token_required
 def handle_projects(current_user):
     if request.method == 'GET':
-        projects = Project.query.filter_by(user_id=current_user.id).all()
-        return jsonify([{
-            'id': p.id,
-            'name': p.name,
-            'description': p.description,
-            'project_type': p.project_type,
-            'created_at': p.created_at.isoformat()
-        } for p in projects])
+        user_projects = {k: v for k, v in projects.items() 
+                        if v['owner_id'] == current_user['id']}
+        return jsonify(list(user_projects.values()))
     
-    data = request.json
-    project = Project(
-        name=data['name'],
-        description=data.get('description', ''),
-        project_type=data['project_type'],
-        user_id=current_user.id,
-        template_id=data.get('template_id')
-    )
-    db.session.add(project)
-    db.session.commit()
+    data = request.get_json()
+    if not data or not data.get('name'):
+        return jsonify({'error': 'Project name is required'}), 400
     
-    return jsonify({
-        'id': project.id,
-        'name': project.name,
-        'description': project.description,
-        'project_type': project.project_type
-    }), 201
+    project_id = str(len(projects) + 1)
+    project = {
+        'id': project_id,
+        'name': data['name'],
+        'description': data.get('description', ''),
+        'owner_id': current_user['id'],
+        'created_at': datetime.datetime.utcnow().isoformat()
+    }
+    
+    projects[project_id] = project
+    
+    return jsonify(project), 201
 
-@app.route('/projects/<int:project_id>/components', methods=['GET', 'POST'])
+@app.route('/projects/<project_id>/components', methods=['GET', 'POST'])
 @token_required
-def handle_components(current_user, project_id):
-    project = Project.query.get_or_404(project_id)
-    
-    if project.user_id != current_user.id:
-        return jsonify({"error": "Unauthorized"}), 403
+def handle_project_components(current_user, project_id):
+    if project_id not in projects:
+        return jsonify({'error': 'Project not found'}), 404
+        
+    if projects[project_id]['owner_id'] != current_user['id']:
+        return jsonify({'error': 'Unauthorized'}), 403
     
     if request.method == 'GET':
-        components = Component.query.filter_by(project_id=project_id).all()
-        return jsonify([{
-            'id': c.id,
-            'name': c.name,
-            'component_type': c.component_type,
-            'content': c.content,
-            'position_x': c.position_x,
-            'position_y': c.position_y
-        } for c in components])
+        project_components = {k: v for k, v in components.items() 
+                            if v['project_id'] == project_id}
+        return jsonify(list(project_components.values()))
     
-    data = request.json
-    component = Component(
-        name=data['name'],
-        component_type=data['component_type'],
-        content=data['content'],
-        project_id=project_id,
-        position_x=data.get('position_x', 0),
-        position_y=data.get('position_y', 0)
-    )
-    db.session.add(component)
-    db.session.commit()
+    data = request.get_json()
+    if not data or not data.get('name') or not data.get('type'):
+        return jsonify({'error': 'Component name and type are required'}), 400
     
-    return jsonify({
-        'id': component.id,
-        'name': component.name,
-        'component_type': component.component_type,
-        'content': component.content
-    }), 201
+    component_id = str(len(components) + 1)
+    component = {
+        'id': component_id,
+        'name': data['name'],
+        'type': data['type'],
+        'content': data.get('content'),
+        'styles': data.get('styles', {}),
+        'position': data.get('position', {}),
+        'project_id': project_id,
+        'created_at': datetime.datetime.utcnow().isoformat()
+    }
+    
+    components[component_id] = component
+    
+    return jsonify(component), 201
 
-@app.route('/generate-code', methods=['POST'])
-@token_required
-def generate_code(current_user):
-    data = request.json
-    prompt = data.get('prompt', '')
-    
-    if not prompt:
-        return jsonify({"error": "Prompt is required"}), 400
-    
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant that generates high-quality, modern code based on user requirements."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=2000
-        )
-        
-        return jsonify({
-            "generated_code": response.choices[0].message.content,
-            "remaining_edits": current_user.get_edit_limit() - current_user.daily_edits
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/upload-asset', methods=['POST'])
-@token_required
-def upload_asset(current_user):
-    if 'file' not in request.files:
-        return jsonify({"error": "No file provided"}), 400
-        
-    file = request.files['file']
-    project_id = request.form.get('project_id')
-    
-    if not project_id:
-        return jsonify({"error": "Project ID is required"}), 400
-    
-    project = Project.query.get_or_404(project_id)
-    if project.user_id != current_user.id:
-        return jsonify({"error": "Unauthorized"}), 403
-    
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        
-        # Process image if it's an image file
-        if file.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
-            img = Image.open(file)
-            # Resize if needed
-            if img.size[0] > 1200 or img.size[1] > 1200:
-                img.thumbnail((1200, 1200))
-            
-            # Save to BytesIO
-            img_io = io.BytesIO()
-            img.save(img_io, format=img.format)
-            img_io.seek(0)
-            
-            # Upload to S3
-            s3.upload_fileobj(
-                img_io,
-                app.config['AWS_BUCKET_NAME'],
-                f"projects/{project_id}/assets/{filename}",
-                ExtraArgs={'ContentType': f'image/{img.format.lower()}'}
-            )
-        else:
-            # Upload original file for non-image assets
-            s3.upload_fileobj(
-                file,
-                app.config['AWS_BUCKET_NAME'],
-                f"projects/{project_id}/assets/{filename}"
-            )
-        
-        # Create asset record
-        asset = Asset(
-            name=filename,
-            asset_type='image' if file.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')) else 'other',
-            url=f"https://{app.config['AWS_BUCKET_NAME']}.s3.amazonaws.com/projects/{project_id}/assets/{filename}",
-            project_id=project_id
-        )
-        db.session.add(asset)
-        db.session.commit()
-        
-        return jsonify({
-            "message": "Asset uploaded successfully",
-            "asset": {
-                "id": asset.id,
-                "name": asset.name,
-                "url": asset.url
-            }
-        })
-    
-    return jsonify({"error": "Invalid file type"}), 400
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({'status': 'healthy', 'timestamp': datetime.datetime.utcnow().isoformat()})
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
+    # Add some error handlers
+    @app.errorhandler(404)
+    def not_found(error):
+        return jsonify({'error': 'Not found'}), 404
+
+    @app.errorhandler(500)
+    def server_error(error):
+        return jsonify({'error': 'Internal server error'}), 500
+
     app.run(debug=True)

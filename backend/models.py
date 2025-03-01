@@ -101,4 +101,4 @@ class Asset(db.Model):
     url = db.Column(db.String(200), nullable=False)
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    metadata = db.Column(db.JSON)  # Store additional metadata like dimensions, format, etc.
+    asset_info = db.Column(db.JSON)  # Store additional metadata like dimensions, format, etc.
