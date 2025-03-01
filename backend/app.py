@@ -17,9 +17,9 @@ openai.api_key = OPENAI_API_KEY
 # Secret key for JWT authentication
 app.config['SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'your-secret-key')
 
-# Mock database
+# Mock database (replace with real database in production)
+users_db = {}
 projects_db = []
-users_db = {"admin": "password123"}  # Replace with actual database
 
 # Authentication decorator
 def token_required(f):
@@ -38,21 +38,41 @@ def token_required(f):
 
 @app.route('/')
 def home():
-    return jsonify({"message": "Welcome to the Web & Mobile App Builder API"})
+    return jsonify({"message": "Welcome to the Quick App Agent API"})
+
+@app.route('/register', methods=['POST'])
+def register():
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
+    
+    if not username or not password:
+        return jsonify({"error": "Username and password are required"}), 400
+        
+    if username in users_db:
+        return jsonify({"error": "Username already exists"}), 400
+        
+    users_db[username] = password
+    return jsonify({"message": "Registration successful", "username": username}), 201
 
 @app.route('/login', methods=['POST'])
 def login():
     data = request.json
     username = data.get("username")
     password = data.get("password")
-    if users_db.get(username) == password:
-        token = jwt.encode(
-            {'user': username, 'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)},
-            app.config['SECRET_KEY'],
-            algorithm="HS256"
-        )
-        return jsonify({'token': token})
-    return jsonify({"error": "Invalid credentials"}), 401
+    
+    if not username or not password:
+        return jsonify({"error": "Username and password are required"}), 400
+        
+    if users_db.get(username) != password:
+        return jsonify({"error": "Invalid credentials"}), 401
+        
+    token = jwt.encode(
+        {'user': username, 'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)},
+        app.config['SECRET_KEY'],
+        algorithm="HS256"
+    )
+    return jsonify({'token': token, 'username': username})
 
 @app.route('/generate-code', methods=['POST'])
 @token_required

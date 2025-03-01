@@ -23,6 +23,13 @@
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
+.login-container h2 {
+  margin: 0;
+  margin-bottom: 1rem;
+  font-size: 1.5rem;
+  color: #61dafb;
+}
+
 .input-field {
   padding: 0.8rem;
   border: none;
@@ -59,13 +66,33 @@
   opacity: 0.7;
 }
 
-.message {
-  margin-top: 1rem;
+.toggle-button {
+  padding: 0.5rem;
+  border: none;
+  border-radius: 4px;
+  background-color: transparent;
   color: #61dafb;
   font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.toggle-button:hover {
+  color: #4fa8c7;
+  text-decoration: underline;
+}
+
+.message {
+  margin-top: 1rem;
+  font-size: 0.9rem;
   min-height: 1.2em;
+  transition: all 0.3s ease;
 }
 
 .message.error {
   color: #ff6b6b;
+}
+
+.message.success {
+  color: #51cf66;
 }

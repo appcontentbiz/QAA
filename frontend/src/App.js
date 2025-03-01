@@ -9,6 +9,28 @@ function App() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+
+  const register = async () => {
+    try {
+      const response = await fetch(`${API_URL}/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await response.json();
+      
+      if (response.ok) {
+        setMessage("Registration successful! Please login.");
+        setIsRegistering(false);
+      } else {
+        setMessage(data.error || "Registration failed");
+      }
+    } catch (error) {
+      console.error("Registration error:", error);
+      setMessage("Error connecting to server. Please try again later.");
+    }
+  };
 
   const login = async () => {
     try {
@@ -18,17 +40,29 @@ function App() {
         body: JSON.stringify({ username, password }),
       });
       const data = await response.json();
-      if (data.token) {
+      
+      if (response.ok) {
         setToken(data.token);
         setIsLoggedIn(true);
-        setMessage("Login successful!");
+        setMessage(`Welcome back, ${data.username}!`);
       } else {
-        setMessage("Login failed: " + (data.error || "Invalid credentials"));
+        setMessage(data.error || "Login failed");
       }
     } catch (error) {
       console.error("Login error:", error);
       setMessage("Error connecting to server. Please make sure the backend server is running.");
     }
+  };
+
+  const resetForm = () => {
+    setUsername("");
+    setPassword("");
+    setMessage("");
+  };
+
+  const toggleMode = () => {
+    setIsRegistering(!isRegistering);
+    resetForm();
   };
 
   return (
@@ -38,6 +72,7 @@ function App() {
         <div className="login-container">
           {!isLoggedIn ? (
             <>
+              <h2>{isRegistering ? "Register" : "Login"}</h2>
               <input
                 type="text"
                 placeholder="Username"
@@ -53,11 +88,17 @@ function App() {
                 className="input-field"
               />
               <button 
-                onClick={login} 
+                onClick={isRegistering ? register : login}
                 className="login-button"
                 disabled={!username || !password}
               >
-                Login
+                {isRegistering ? "Register" : "Login"}
+              </button>
+              <button 
+                onClick={toggleMode}
+                className="toggle-button"
+              >
+                {isRegistering ? "Already have an account? Login" : "Need an account? Register"}
               </button>
             </>
           ) : (
@@ -67,9 +108,7 @@ function App() {
                 onClick={() => {
                   setToken("");
                   setIsLoggedIn(false);
-                  setMessage("");
-                  setUsername("");
-                  setPassword("");
+                  resetForm();
                 }} 
                 className="login-button"
               >
@@ -77,7 +116,7 @@ function App() {
               </button>
             </div>
           )}
-          <p className={`message ${message.includes('Error') ? 'error' : ''}`}>
+          <p className={`message ${message.includes('Error') || message.includes('failed') ? 'error' : message.includes('successful') ? 'success' : ''}`}>
             {message}
           </p>
         </div>
