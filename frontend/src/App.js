@@ -1,8 +1,6 @@
 import React, { useState } from "react";
 import "./App.css";
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-
 function App() {
   const [token, setToken] = useState("");
   const [username, setUsername] = useState("");
@@ -14,70 +12,90 @@ function App() {
   const [generatedCode, setGeneratedCode] = useState("");
   const [activeTab, setActiveTab] = useState("generate"); // generate, projects, settings
 
+  // Get the API URL based on environment
+  const API_URL = process.env.NODE_ENV === 'production'
+    ? '/.netlify/functions/api'
+    : 'http://localhost:8888/.netlify/functions/api';
+
   const register = async () => {
     try {
-      const response = await fetch(`${API_URL}/register`, {
+      setMessage("Registering...");
+      const response = await fetch(`${API_URL}/auth/register`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: JSON.stringify({ username, password }),
       });
+
       const data = await response.json();
       
-      if (response.ok) {
-        setMessage("Registration successful! Please login.");
-        setIsRegistering(false);
+      if (data.token) {
+        setToken(data.token);
+        setMessage("Registration successful!");
+        localStorage.setItem('token', data.token);
       } else {
-        setMessage(data.error || "Registration failed");
+        setMessage(data.message || "Registration failed!");
       }
     } catch (error) {
-      console.error("Registration error:", error);
-      setMessage("Error connecting to server. Please try again later.");
+      console.error('Registration error:', error);
+      setMessage("Error connecting to server. Please try again.");
     }
   };
 
   const login = async () => {
     try {
-      const response = await fetch(`${API_URL}/login`, {
+      setMessage("Logging in...");
+      const response = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: JSON.stringify({ username, password }),
       });
+
       const data = await response.json();
       
-      if (response.ok) {
+      if (data.token) {
         setToken(data.token);
         setIsLoggedIn(true);
-        setMessage(`Welcome back, ${data.username}!`);
+        setMessage("Login successful!");
+        localStorage.setItem('token', data.token);
       } else {
-        setMessage(data.error || "Login failed");
+        setMessage(data.message || "Login failed!");
       }
     } catch (error) {
-      console.error("Login error:", error);
-      setMessage("Error connecting to server. Please make sure the backend server is running.");
+      console.error('Login error:', error);
+      setMessage("Error connecting to server. Please try again.");
     }
   };
 
   const generateCode = async () => {
     try {
+      setMessage("Generating code...");
       const response = await fetch(`${API_URL}/generate-code`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
+          "Accept": "application/json",
           "x-access-token": token
         },
         body: JSON.stringify({ prompt: codePrompt }),
       });
+
       const data = await response.json();
       
-      if (response.ok) {
+      if (data.generated_code) {
         setGeneratedCode(data.generated_code);
         setMessage("Code generated successfully!");
       } else {
-        setMessage(data.error || "Failed to generate code");
+        setMessage(data.message || "Failed to generate code!");
       }
     } catch (error) {
-      console.error("Code generation error:", error);
-      setMessage("Error connecting to server.");
+      console.error('Code generation error:', error);
+      setMessage("Error connecting to server. Please try again.");
     }
   };
 
@@ -216,7 +234,7 @@ function App() {
             >
               {isRegistering ? "Already have an account? Login" : "Need an account? Register"}
             </button>
-            <p className={`message ${message.includes('Error') || message.includes('failed') ? 'error' : message.includes('successful') ? 'success' : ''}`}>
+            <p className={`message ${message.includes('successful') ? 'success' : 'error'}`}>
               {message}
             </p>
           </div>
