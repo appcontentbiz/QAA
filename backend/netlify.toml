@@ -1,0 +1,56 @@
+[build]
+  base = "backend"
+  command = "npm install"
+  functions = "functions"
+  publish = "build"
+
+[build.environment]
+  NODE_VERSION = "20"
+  NPM_VERSION = "10"
+  NODE_ENV = "production"
+
+[dev]
+  framework = "#custom"
+  command = "npm run dev"
+  targetPort = 3000
+  port = 8888
+  publish = "build"
+  autoLaunch = true
+
+[functions]
+  directory = "functions"
+  node_bundler = "esbuild"
+  included_files = [
+    "src/**"
+  ]
+  external_node_modules = [
+    "express",
+    "mongoose",
+    "passport"
+  ]
+
+[functions.api]
+  included_files = ["build/**"]
+  timeout = 30
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, POST, PUT, DELETE, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type, Authorization"
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
