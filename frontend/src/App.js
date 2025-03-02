@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import "./App.css";
 
 function App() {
@@ -11,16 +11,23 @@ function App() {
   const [codePrompt, setCodePrompt] = useState("");
   const [generatedCode, setGeneratedCode] = useState("");
   const [activeTab, setActiveTab] = useState("generate"); // generate, projects, settings
+  const [apiUrl, setApiUrl] = useState("");
 
   // Get the API URL based on environment
-  const API_URL = process.env.NODE_ENV === 'production'
-    ? '/.netlify/functions/api'
-    : 'http://localhost:8888/.netlify/functions/api';
+  useEffect(() => {
+    const url = window.location.hostname === 'localhost' 
+      ? 'http://localhost:8888/.netlify/functions/api'
+      : '/.netlify/functions/api';
+    setApiUrl(url);
+    console.log('API URL:', url);
+  }, []);
 
   const register = async () => {
     try {
       setMessage("Registering...");
-      const response = await fetch(`${API_URL}/auth/register`, {
+      console.log('Attempting registration to:', `${apiUrl}/auth/register`);
+
+      const response = await fetch(`${apiUrl}/auth/register`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -29,7 +36,9 @@ function App() {
         body: JSON.stringify({ username, password }),
       });
 
+      console.log('Response status:', response.status);
       const data = await response.json();
+      console.log('Response data:', data);
       
       if (data.token) {
         setToken(data.token);
@@ -40,14 +49,16 @@ function App() {
       }
     } catch (error) {
       console.error('Registration error:', error);
-      setMessage("Error connecting to server. Please try again.");
+      setMessage(`Error connecting to server. Details: ${error.message}`);
     }
   };
 
   const login = async () => {
     try {
-      setMessage("Logging in...");
-      const response = await fetch(`${API_URL}/auth/login`, {
+      setMessage("Connecting to server...");
+      console.log('Attempting login to:', `${apiUrl}/auth/login`);
+
+      const response = await fetch(`${apiUrl}/auth/login`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -56,7 +67,9 @@ function App() {
         body: JSON.stringify({ username, password }),
       });
 
+      console.log('Response status:', response.status);
       const data = await response.json();
+      console.log('Response data:', data);
       
       if (data.token) {
         setToken(data.token);
@@ -68,14 +81,16 @@ function App() {
       }
     } catch (error) {
       console.error('Login error:', error);
-      setMessage("Error connecting to server. Please try again.");
+      setMessage(`Error connecting to server. Details: ${error.message}`);
     }
   };
 
   const generateCode = async () => {
     try {
       setMessage("Generating code...");
-      const response = await fetch(`${API_URL}/generate-code`, {
+      console.log('Attempting code generation to:', `${apiUrl}/generate-code`);
+
+      const response = await fetch(`${apiUrl}/generate-code`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -85,7 +100,9 @@ function App() {
         body: JSON.stringify({ prompt: codePrompt }),
       });
 
+      console.log('Response status:', response.status);
       const data = await response.json();
+      console.log('Response data:', data);
       
       if (data.generated_code) {
         setGeneratedCode(data.generated_code);
@@ -95,7 +112,7 @@ function App() {
       }
     } catch (error) {
       console.error('Code generation error:', error);
-      setMessage("Error connecting to server. Please try again.");
+      setMessage(`Error connecting to server. Details: ${error.message}`);
     }
   };
 
@@ -118,6 +135,32 @@ function App() {
     setIsRegistering(!isRegistering);
     resetForm();
   };
+
+  // Test connection on component mount
+  useEffect(() => {
+    const testConnection = async () => {
+      try {
+        setMessage("Testing connection...");
+        const response = await fetch(`${apiUrl}`, {
+          method: "GET",
+          headers: { "Accept": "application/json" }
+        });
+        
+        console.log('Health check status:', response.status);
+        const data = await response.json();
+        console.log('Health check data:', data);
+        
+        setMessage(data.status === 'ok' ? 'Connected to server' : 'Server status check failed');
+      } catch (error) {
+        console.error('Connection test error:', error);
+        setMessage("Cannot connect to server. Please check your connection.");
+      }
+    };
+
+    if (apiUrl) {
+      testConnection();
+    }
+  }, [apiUrl]);
 
   const renderDashboard = () => (
     <div className="dashboard">
@@ -234,9 +277,12 @@ function App() {
             >
               {isRegistering ? "Already have an account? Login" : "Need an account? Register"}
             </button>
-            <p className={`message ${message.includes('successful') ? 'success' : 'error'}`}>
+            <p className={`message ${message.includes('successful') || message.includes('Connected') ? 'success' : 'error'}`}>
               {message}
             </p>
+            <div className="debug-info">
+              <small>API URL: {apiUrl}</small>
+            </div>
           </div>
         ) : (
           renderDashboard()
