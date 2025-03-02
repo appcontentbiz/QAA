@@ -1,5 +1,5 @@
-const serverless = require('serverless-http');
 const express = require('express');
+const serverless = require('serverless-http');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const passport = require('passport');
@@ -7,27 +7,21 @@ const passport = require('passport');
 // Create express app
 const app = express();
 
-// Configure mongoose for serverless environment
-mongoose.set('bufferCommands', false);
-
-// CORS configuration
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
-// Middleware
+// Basic middleware
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(passport.initialize());
 
+// Initialize passport
+require('../src/config/passport')(passport);
+
 // Health check endpoint
 app.get('/.netlify/functions/api', (req, res) => {
-  res.json({ status: 'API is running', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Import routes
+// Routes
 app.use('/.netlify/functions/api/auth', require('../src/routes/auth'));
 app.use('/.netlify/functions/api/projects', require('../src/routes/projects'));
 app.use('/.netlify/functions/api/components', require('../src/routes/components'));
@@ -44,66 +38,56 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Create handler
+// MongoDB connection with retry
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 5000,
+    });
+    console.log('MongoDB Connected');
+  } catch (err) {
+    console.error('MongoDB connection error:', err);
+    throw err;
+  }
+};
+
+// Handler
 const handler = serverless(app);
 
-// Wrap handler to manage database connections
 exports.handler = async (event, context) => {
-  // Make context callbackWaitsForEmptyEventLoop = false to prevent timeout
+  // Make sure we don't wait for empty event loop
   context.callbackWaitsForEmptyEventLoop = false;
 
-  // Log incoming request
-  console.log('Request:', {
-    path: event.path,
-    httpMethod: event.httpMethod,
-    headers: event.headers
-  });
+  // Connect to MongoDB if not connected
+  if (mongoose.connection.readyState !== 1) {
+    try {
+      await connectDB();
+    } catch (err) {
+      return {
+        statusCode: 500,
+        body: JSON.stringify({
+          error: 'Database connection failed',
+          message: 'Unable to connect to database'
+        })
+      };
+    }
+  }
 
-  // Handle preflight requests
-  if (event.httpMethod === 'OPTIONS') {
+  try {
+    const result = await handler(event, context);
     return {
-      statusCode: 204,
+      ...result,
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Max-Age': '86400'
+        ...result.headers
       }
     };
-  }
-
-  try {
-    // Check MongoDB connection
-    if (mongoose.connection.readyState !== 1) {
-      await mongoose.connect(process.env.MONGODB_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-        serverSelectionTimeoutMS: 5000,
-        socketTimeoutMS: 45000,
-      });
-      console.log('MongoDB connected');
-    }
-
-    // Handle the request
-    const response = await handler(event, context);
-
-    // Log response
-    console.log('Response:', {
-      statusCode: response.statusCode,
-      headers: response.headers
-    });
-
-    return {
-      ...response,
-      headers: {
-        ...response.headers,
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS'
-      }
-    };
-  } catch (error) {
-    console.error('Function error:', error);
+  } catch (err) {
+    console.error('Handler error:', err);
     return {
       statusCode: 500,
       headers: {
@@ -112,9 +96,8 @@ exports.handler = async (event, context) => {
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS'
       },
       body: JSON.stringify({
-        error: 'Internal Server Error',
-        message: error.message,
-        timestamp: new Date().toISOString()
+        error: 'Server error',
+        message: err.message
       })
     };
   }

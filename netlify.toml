@@ -1,6 +1,6 @@
 [build]
   base = "/"
-  command = "npm install && npm run build"
+  command = "npm install"
   functions = "functions"
   publish = "build"
 
@@ -21,11 +21,9 @@
   directory = "functions"
   node_bundler = "esbuild"
   included_files = [
-    "src/**",
-    "package.json"
+    "src/**"
   ]
   external_node_modules = [
-    "mongodb-client-encryption",
     "express",
     "mongoose",
     "passport"
